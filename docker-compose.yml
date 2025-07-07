@@ -1,0 +1,249 @@
+version: '3.8'
+
+services:
+  # Main trading bot
+  trading-bot:
+    build:
+      context: .
+      target: production
+    container_name: advanced-futures-bot
+    restart: unless-stopped
+    environment:
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - WANDB_API_KEY=${WANDB_API_KEY}
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./checkpoints:/app/checkpoints
+      - ./models:/app/models
+    networks:
+      - trading-network
+    depends_on:
+      - redis
+      - influxdb
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Training service
+  training:
+    build:
+      context: .
+      target: training
+    container_name: trading-bot-training
+    restart: unless-stopped
+    environment:
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - WANDB_API_KEY=${WANDB_API_KEY}
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./checkpoints:/app/checkpoints
+      - ./models:/app/models
+    networks:
+      - trading-network
+    depends_on:
+      - redis
+      - influxdb
+    profiles:
+      - training
+
+  # Redis for caching and message queue
+  redis:
+    image: redis:7-alpine
+    container_name: trading-bot-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # InfluxDB for time-series data
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: trading-bot-influxdb
+    restart: unless-stopped
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword
+      - DOCKER_INFLUXDB_INIT_ORG=tradingbot
+      - DOCKER_INFLUXDB_INIT_BUCKET=trading_data
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=admin-token
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana for monitoring
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: trading-bot-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - trading-network
+    depends_on:
+      - influxdb
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # TensorBoard for model monitoring
+  tensorboard:
+    build:
+      context: .
+      target: training
+    container_name: trading-bot-tensorboard
+    restart: unless-stopped
+    command: ["tensorboard", "--logdir=/app/logs", "--host=0.0.0.0", "--port=6006"]
+    ports:
+      - "6006:6006"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - trading-network
+    profiles:
+      - monitoring
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: trading-bot-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - trading-network
+    profiles:
+      - monitoring
+
+  # AlertManager for notifications
+  alertmanager:
+    image: prom/alertmanager:v0.25.0
+    container_name: trading-bot-alertmanager
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager-data:/alertmanager
+    networks:
+      - trading-network
+    profiles:
+      - monitoring
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: trading-bot-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./monitoring/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./monitoring/nginx/ssl:/etc/nginx/ssl
+    networks:
+      - trading-network
+    depends_on:
+      - grafana
+      - tensorboard
+    profiles:
+      - monitoring
+
+  # Development service
+  dev:
+    build:
+      context: .
+      target: development
+    container_name: trading-bot-dev
+    restart: unless-stopped
+    environment:
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./advanced_futures_bot:/app/advanced_futures_bot
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./checkpoints:/app/checkpoints
+      - ./models:/app/models
+    networks:
+      - trading-network
+    depends_on:
+      - redis
+    profiles:
+      - development
+
+  # Testing service
+  test:
+    build:
+      context: .
+      target: testing
+    container_name: trading-bot-test
+    environment:
+      - PYTHONPATH=/app
+    volumes:
+      - ./advanced_futures_bot:/app/advanced_futures_bot
+      - ./tests:/app/tests
+    networks:
+      - trading-network
+    profiles:
+      - testing
+
+volumes:
+  redis-data:
+    driver: local
+  influxdb-data:
+    driver: local
+  grafana-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  alertmanager-data:
+    driver: local
+
+networks:
+  trading-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16 

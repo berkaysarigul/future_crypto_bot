@@ -1,35 +1,93 @@
 # cursor_rules.yaml
 
-project_name: BTCUSDT Advanced Futures RL Bot + DeepSeek
+project_name: BTCUSDT Advanced Futures RL Bot + DeepSeek LLM
 
 purpose: >
-  Bu proje Binance BTCUSDT Futures işlemlerini otomatik yönetir.
-  Hybrid PPO + LSTM + Transformer agent.
-  DeepSeek LLM API sentiment & event tag.
-  Realistic slippage & order book sim.
-  Regime Switching RL + Hedge overlay + Explainable AI.
+  Bu proje Binance BTCUSDT Futures işlemlerini full otomatik yönetir.
+  PPO + LSTM + Transformer hybrid RL agent.
+  DeepSeek LLM API sentiment & event tag ile feature set.
+  Regime switching + risk management + explainable AI.
+  Production-ready: real-time stream, backtest, drift detect, failover.
 
 context:
   directory_structure:
-    - config.yaml
-    - data/ (data_fetcher.py, sentiment_deepseek.py, order_book_handler.py)
-    - env/ (futures_env.py)
-    - agent/ (hybrid_policy.py, reward_function.py, hyperopt.py, regime_switcher.py, continual_trainer.py)
-    - trading/ (position_manager.py, liquidation_checker.py, execution_engine.py, hedge_overlay.py)
-    - utils/ (logger.py, explainable_ai.py)
-    - tests/ (test_futures_bot.py)
+    - config/
+      - config.yaml
+      - environment_configs.py
+      - model_configs.py
+      - trading_configs.py
+    - data/
+      - data_fetcher.py
+      - sentiment_deepseek.py
+      - order_book_handler.py
+      - real_time_streamer.py
+      - feature_engineering.py
+    - env/
+      - futures_env.py
+    - agent/
+      - hybrid_policy.py
+      - reward_function.py
+      - hyperopt.py
+      - regime_switcher.py
+      - continual_trainer.py
+    - trading/
+      - position_manager.py
+      - liquidation_checker.py
+      - execution_engine.py
+      - hedge_overlay.py
+    - risk_management/
+      - var_calculator.py
+      - risk_metrics.py
+      - position_sizing.py
+      - stress_testing.py
+    - backtest/
+      - backtester.py
+      - performance_analytics.py
+      - walk_forward_validator.py
+      - monte_carlo_simulator.py
+    - models/
+      - model_registry.py
+      - model_validator.py
+      - ensemble_manager.py
+      - drift_detector.py
+    - infrastructure/
+      - health_checker.py
+      - alert_system.py
+      - database_manager.py
+      - backup_manager.py
+      - failover_handler.py
+    - external_data/
+      - news_scraper.py
+      - social_media_monitor.py
+      - economic_calendar.py
+      - whale_tracker.py
+      - fear_greed_index.py
+    - strategies/
+      - signal_generator.py
+      - portfolio_optimizer.py
+      - rebalancing_engine.py
+      - strategy_evaluator.py
+    - utils/
+      - logger.py
+      - explainable_ai.py
+      - trade_logger.py
+    - tests/
+      - test_futures_bot.py
     - main.py
 
 rules:
-  - SPOT logic yoktur.
-  - Action: -1 short, 0 flat, +1 long.
-  - Sentiment DeepSeek + event + OI + funding + order book combined.
-  - Reward: Conditional (PnL, funding fee, liquidation, VaR, sentiment).
-  - Regime switch active.
-  - Execution realistic order book impact.
+  - SPOT logic yoktur, sadece Futures.
+  - Action: -1 (short), 0 (flat), +1 (long).
+  - Hybrid input: DeepSeek sentiment + order book + on-chain + macro.
+  - Reward shaping: PnL + funding fee + liquidation penalty + VaR penalty + regime bonus.
+  - Regime switch → auto hyperparam switch.
+  - Execution realistic: order book impact, partial fill, TWAP/VWAP.
   - Hedge overlay opsiyonel.
-  - Continual learning loop.
-  - Explainable AI SHAP, LIME.
-  - Secrets `.env`.
-  - PEP8, type hint, modular.
-  - Tests %100 futures.
+  - Drift detection + model registry aktif.
+  - Database PostgreSQL veya SQLite destekli.
+  - Health check + alert + failover aktif.
+  - Trade logger full trace.
+  - Logging: WandB, TensorBoard, Grafana.
+  - Secrets `.env` veya vault.
+  - Kod tip güvenli, PEP8 uyumlu, yorumlu.
+  - Tests %100 coverage.

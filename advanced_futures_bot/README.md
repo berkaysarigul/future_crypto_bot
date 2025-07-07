@@ -1,22 +1,38 @@
 <!-- CURSOR CONTEXT START -->
 
-## 🚀 BTCUSDT Advanced Futures RL Bot + DeepSeek
+## ⚡ BTCUSDT Advanced Futures RL Bot + DeepSeek LLM
 
-- **Amaç:** Binance BTCUSDT Futures, PPO + LSTM + Transformer hybrid.
-- **Sentiment:** DeepSeek LLM API + event tag.
-- **Data:** Order Book depth, OI, Funding Rate, Whale, On-chain.
-- **Reward:** Conditional PnL + VaR + funding penalty + liquidation.
-- **Execution:** Realistic slippage, TWAP, partial fill.
-- **Regime Switch:** Trend/range detect → param auto adjust.
-- **Hedge:** Optional spread / perp premium.
-- **Explainable AI:** SHAP, LIME.
-- **Logging:** WandB, TensorBoard, Grafana.
-- **Config:** `config.yaml`
-- **Secrets:** `.env` or vault.
-- **Tests:** Only Futures, no spot.
+### 🎯 Amaç
+- Binance BTCUSDT Futures otomatik RL trading.
+- Hybrid PPO + LSTM + Transformer policy.
+- DeepSeek LLM API → sentiment & event tag.
+- Realistic backtest + live trading + failover + health check.
 
-**Klasör:**
-- data/, env/, agent/, trading/, utils/, tests/, main.py
-- Tüm modüller directory_structure ve rules'a sadık.
+### 📂 Klasör Yapısı
+- config/ → env, trading, model configs
+- data/ → fetcher, sentiment, order book, streamer, feature eng.
+- env/ → futures_env
+- agent/ → hybrid policy, reward, hyperopt, regime switch
+- trading/ → position manager, liquidation, execution, hedge
+- risk_management/ → VaR, drawdown, position sizing, stress test
+- backtest/ → backtester, walk-forward, monte carlo
+- models/ → versioning, registry, drift detector
+- infrastructure/ → health check, alert, DB, failover
+- external_data/ → news, social media, whale, fear/greed
+- strategies/ → signal gen, portfolio optimizer, rebalancing
+- utils/ → logger, explainable AI, trade logger
+- tests/ → full test
+- main.py → pipeline: fetch → env → agent → trade → log → monitor
+
+### ✅ Kurallar
+- Sadece Futures.
+- Action: -1 short, 0 flat, +1 long.
+- Sentiment DeepSeek + order book + funding + macro combined.
+- Reward shaping: PnL + VaR + risk.
+- Drift detect aktif.
+- Health + failover + alerts.
+- Trade logger trace.
+- Logging: WandB, TB, Grafana.
+- API keys `.env`.
 
 <!-- CURSOR CONTEXT END -->

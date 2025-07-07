@@ -1,4 +1,4 @@
-# config.yaml
+# config/config.yaml
 
 trade_mode: futures
 
@@ -8,7 +8,6 @@ api_key_env: BINANCE_API_KEY
 api_secret_env: BINANCE_API_SECRET
 deepseek_api_key_env: DEEPSEEK_API_KEY
 
-# Futures Risk
 leverage: 5
 max_position_size: 0.1
 stop_loss: 0.02
@@ -18,23 +17,21 @@ liquidation_threshold: 0.8
 slippage_pct: 0.001
 commission_pct: 0.0004
 var_limit: 0.02
+drawdown_limit: 0.25
 
-# Sentiment + Event
 sentiment_weight: 0.3
 sentiment_confidence_threshold: 0.6
 
-# Regime
 regime_window: 50
 trend_threshold: 0.7
 
-# Training
 total_timesteps: 5_000_000
 batch_size: 64
 learning_rate: 0.0003
 clip_range: 0.2
 entropy_coef: 0.01
 
-# Logging
 use_wandb: true
-wandb_project: btcusdt_futures_rl_pro
+wandb_project: btcusdt_futures_rl_ultimate
 log_level: info
+database_url: postgresql://localhost:5432/bot_db
