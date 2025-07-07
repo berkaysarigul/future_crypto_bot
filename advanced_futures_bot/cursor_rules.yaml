@@ -1,0 +1,35 @@
+# cursor_rules.yaml
+
+project_name: BTCUSDT Advanced Futures RL Bot + DeepSeek
+
+purpose: >
+  Bu proje Binance BTCUSDT Futures işlemlerini otomatik yönetir.
+  Hybrid PPO + LSTM + Transformer agent.
+  DeepSeek LLM API sentiment & event tag.
+  Realistic slippage & order book sim.
+  Regime Switching RL + Hedge overlay + Explainable AI.
+
+context:
+  directory_structure:
+    - config.yaml
+    - data/ (data_fetcher.py, sentiment_deepseek.py, order_book_handler.py)
+    - env/ (futures_env.py)
+    - agent/ (hybrid_policy.py, reward_function.py, hyperopt.py, regime_switcher.py, continual_trainer.py)
+    - trading/ (position_manager.py, liquidation_checker.py, execution_engine.py, hedge_overlay.py)
+    - utils/ (logger.py, explainable_ai.py)
+    - tests/ (test_futures_bot.py)
+    - main.py
+
+rules:
+  - SPOT logic yoktur.
+  - Action: -1 short, 0 flat, +1 long.
+  - Sentiment DeepSeek + event + OI + funding + order book combined.
+  - Reward: Conditional (PnL, funding fee, liquidation, VaR, sentiment).
+  - Regime switch active.
+  - Execution realistic order book impact.
+  - Hedge overlay opsiyonel.
+  - Continual learning loop.
+  - Explainable AI SHAP, LIME.
+  - Secrets `.env`.
+  - PEP8, type hint, modular.
+  - Tests %100 futures.

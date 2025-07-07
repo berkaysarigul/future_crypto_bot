@@ -1,0 +1,20 @@
+# RL, veri, NLP, logging, explainable AI, hyperopt, test için temel paketler
+binance-futures-connector
+ccxt
+pandas
+numpy
+scikit-learn
+gymnasium
+torch
+torchvision
+torchaudio
+transformers
+optuna
+ray[tune]
+wandb
+tensorboard
+shap
+lime
+requests
+python-dotenv
+pytest 
