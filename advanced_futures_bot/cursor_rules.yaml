@@ -1,27 +1,23 @@
 # cursor_rules.yaml
 
-project_name: BTCUSDT Advanced Futures RL Bot + DeepSeek LLM
+project_name: BTCUSDT Advanced Futures RL Bot + DeepSeek LLM + Full Hedge Infra
 
 purpose: >
-  Bu proje Binance BTCUSDT Futures işlemlerini full otomatik yönetir.
-  PPO + LSTM + Transformer hybrid RL agent.
-  DeepSeek LLM API sentiment & event tag ile feature set.
-  Regime switching + risk management + explainable AI.
-  Production-ready: real-time stream, backtest, drift detect, failover.
+  BTCUSDT için Binance Futures marketinde tam otomatik, hybrid PPO + LSTM + Transformer RL trading bot.
+  Real-time WebSocket, DeepSeek sentiment, stress test, failover, drift detect, portfolio optimization.
+  Production-ready hedge fund PoC.
 
 context:
   directory_structure:
     - config/
       - config.yaml
-      - environment_configs.py
-      - model_configs.py
-      - trading_configs.py
+      - config_validator.py
     - data/
       - data_fetcher.py
       - sentiment_deepseek.py
       - order_book_handler.py
       - real_time_streamer.py
-      - feature_engineering.py
+      - data_validator.py
     - env/
       - futures_env.py
     - agent/
@@ -36,37 +32,30 @@ context:
       - execution_engine.py
       - hedge_overlay.py
     - risk_management/
+      - risk_manager.py
       - var_calculator.py
       - risk_metrics.py
       - position_sizing.py
       - stress_testing.py
     - backtest/
       - backtester.py
-      - performance_analytics.py
-      - walk_forward_validator.py
-      - monte_carlo_simulator.py
+      - performance_analyzer.py
     - models/
-      - model_registry.py
-      - model_validator.py
-      - ensemble_manager.py
+      - model_manager.py
       - drift_detector.py
+    - strategies/
+      - strategy_evaluator.py
+      - portfolio_optimizer.py
     - infrastructure/
-      - health_checker.py
-      - alert_system.py
       - database_manager.py
-      - backup_manager.py
+      - alert_system.py
+      - health_checker.py
       - failover_handler.py
     - external_data/
       - news_scraper.py
       - social_media_monitor.py
-      - economic_calendar.py
       - whale_tracker.py
       - fear_greed_index.py
-    - strategies/
-      - signal_generator.py
-      - portfolio_optimizer.py
-      - rebalancing_engine.py
-      - strategy_evaluator.py
     - utils/
       - logger.py
       - explainable_ai.py
@@ -76,18 +65,18 @@ context:
     - main.py
 
 rules:
-  - SPOT logic yoktur, sadece Futures.
-  - Action: -1 (short), 0 (flat), +1 (long).
-  - Hybrid input: DeepSeek sentiment + order book + on-chain + macro.
-  - Reward shaping: PnL + funding fee + liquidation penalty + VaR penalty + regime bonus.
-  - Regime switch → auto hyperparam switch.
-  - Execution realistic: order book impact, partial fill, TWAP/VWAP.
-  - Hedge overlay opsiyonel.
-  - Drift detection + model registry aktif.
-  - Database PostgreSQL veya SQLite destekli.
-  - Health check + alert + failover aktif.
-  - Trade logger full trace.
-  - Logging: WandB, TensorBoard, Grafana.
+  - Sadece Futures logic.
+  - Action: -1 (short) / 0 (flat) / +1 (long)
+  - Real-time WebSocket data.
+  - Backtester: Walk-forward + realistic latency.
+  - Model Manager: Versioning, checkpoint, A/B.
+  - Drift detect aktif.
+  - Stress test: Flash crash, black swan.
+  - Failover handler → pozisyonları flat close.
+  - External data: News, social, whale, fear/greed index.
+  - Trade logger → tam trace.
   - Secrets `.env` veya vault.
-  - Kod tip güvenli, PEP8 uyumlu, yorumlu.
+  - Async/await uyumlu.
+  - Exception Handling + logging (WandB, TB, Grafana)
   - Tests %100 coverage.
+

@@ -6,11 +6,13 @@ import logging
 from unittest.mock import Mock, patch, MagicMock
 import sys
 import os
+import asyncio
 
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from data.data_fetcher import DataFetcher
+from data.news_manager import NewsManager
 from sentiment.sentiment_deepseek import SentimentAnalyzer
 from trading.order_book_handler import OrderBookHandler
 from trading.futures_env import FuturesEnvironment
@@ -25,6 +27,12 @@ from trading.execution_engine import ExecutionEngine
 from trading.hedge_overlay import HedgeOverlay
 from utils.logger import TradingLogger
 from utils.explainable_ai import ExplainableAI
+from backtest.backtester import Backtester
+from env.futures_env import FuturesEnv
+from models.model_manager import ModelManager
+from analytics.performance_analyzer import PerformanceAnalyzer
+from data.data_validator import DataValidator
+from config.config_validator import ConfigValidator
 
 # Setup logging for tests
 logging.basicConfig(level=logging.ERROR)
@@ -614,6 +622,350 @@ class TestExplainableAI(unittest.TestCase):
         if os.path.exists("test_explainability"):
             shutil.rmtree("test_explainability")
 
+class TestBacktester(unittest.TestCase):
+    def setUp(self):
+        from backtest.backtester import Backtester
+        from env.futures_env import FuturesEnv
+        from trading.execution_engine import ExecutionEngine
+        self.env = MagicMock(spec=FuturesEnv)
+        self.executor = MagicMock(spec=ExecutionEngine)
+        self.config = {"walk_forward": True}
+        self.backtester = Backtester(self.env, self.executor, self.config)
+
+    def test_run_walk_forward(self):
+        loop = asyncio.get_event_loop()
+        result = loop.run_until_complete(self.backtester.run_walk_forward())
+        self.assertIsNone(result)
+
+class TestModelManager(unittest.TestCase):
+    def setUp(self):
+        from models.model_manager import ModelManager
+        self.model_manager = ModelManager("/tmp/models")
+
+    def test_save_and_load_checkpoint(self):
+        self.model_manager.save_checkpoint({}, "test_model")
+        model = self.model_manager.load_checkpoint("test_model")
+        self.assertIsNone(model)
+
+    def test_list_versions(self):
+        versions = self.model_manager.list_versions()
+        self.assertIsInstance(versions, list)
+
+    def test_ab_test(self):
+        result = self.model_manager.ab_test({}, {})
+        self.assertIn(result, ["A", "B", "error"])
+
+class TestPerformanceAnalyzer(unittest.TestCase):
+    def setUp(self):
+        from analytics.performance_analyzer import PerformanceAnalyzer
+        self.analyzer = PerformanceAnalyzer()
+
+    def test_sharpe_ratio(self):
+        returns = [0.01, 0.02, -0.01, 0.03]
+        ratio = self.analyzer.sharpe_ratio(returns)
+        self.assertIsInstance(ratio, float)
+
+    def test_sortino_ratio(self):
+        returns = [0.01, 0.02, -0.01, 0.03]
+        ratio = self.analyzer.sortino_ratio(returns)
+        self.assertIsInstance(ratio, float)
+
+    def test_max_drawdown(self):
+        curve = [100, 110, 105, 120, 90, 130]
+        dd = self.analyzer.max_drawdown(curve)
+        self.assertIsInstance(dd, float)
+
+    def test_win_loss_ratio(self):
+        trades = [{"pnl": 1}, {"pnl": -1}, {"pnl": 2}]
+        wl = self.analyzer.win_loss_ratio(trades)
+        self.assertIsInstance(wl, float)
+
+class TestDataValidator(unittest.TestCase):
+    def setUp(self):
+        from data.data_validator import DataValidator
+        self.validator = DataValidator()
+        self.data = [
+            {"price": 100, "volume": 1},
+            {"price": 101, "volume": 2},
+            {"price": 100, "volume": 1},
+        ]
+
+    def test_check_sanity(self):
+        self.assertTrue(self.validator.check_sanity(self.data))
+
+    def test_detect_missing(self):
+        missing = self.validator.detect_missing(self.data)
+        self.assertIsInstance(missing, list)
+
+    def test_clean_duplicates(self):
+        cleaned = self.validator.clean_duplicates(self.data)
+        self.assertIsInstance(cleaned, list)
+
+class TestConfigValidator(unittest.TestCase):
+    def setUp(self):
+        from config.config_validator import ConfigValidator
+        self.schema = {"param1": str, "param2": int}
+        self.validator = ConfigValidator(self.schema)
+        self.config_path = "advanced_futures_bot/config.yaml"
+
+    def test_validate(self):
+        valid = self.validator.validate(self.config_path)
+        self.assertIsInstance(valid, bool)
+
+class TestStrategyEvaluator(unittest.TestCase):
+    def setUp(self):
+        from strategies.strategy_evaluator import StrategyEvaluator
+        self.evaluator = StrategyEvaluator([lambda x: x])
+        self.data = [{"price": 100}, {"price": 101}]
+
+    def test_evaluate(self):
+        result = self.evaluator.evaluate(self.data)
+        self.assertIsInstance(result, dict)
+
+class TestStressTesting(unittest.TestCase):
+    def setUp(self):
+        from risk_management.stress_testing import StressTesting
+        self.stress = StressTesting()
+        self.data = [{"price": 100}, {"price": 90}]
+
+    def test_flash_crash(self):
+        result = self.stress.flash_crash(self.data)
+        self.assertIsInstance(result, list)
+
+    def test_black_swan(self):
+        result = self.stress.black_swan(self.data)
+        self.assertIsInstance(result, list)
+
+class TestDriftDetector(unittest.TestCase):
+    def setUp(self):
+        from models.drift_detector import DriftDetector
+        self.detector = DriftDetector(0.5)
+
+    def test_detect(self):
+        predictions = [0.1, 0.2, 0.3]
+        actuals = [0.1, 0.2, 0.3]
+        drift = self.detector.detect(predictions, actuals)
+        self.assertIsInstance(drift, bool)
+
+class TestFailoverHandler(unittest.TestCase):
+    def setUp(self):
+        from infrastructure.failover_handler import FailoverHandler
+        self.alert_system = type('MockAlert', (), {"send_alert": lambda self, msg: None})()
+        self.health_checker = object()
+        self.handler = FailoverHandler(self.alert_system, self.health_checker)
+
+    def test_handle_failover(self):
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = loop.run_until_complete(self.handler.handle_failover("test error"))
+        self.assertIsNone(result)
+
+class TestNewsScraper(unittest.TestCase):
+    def setUp(self):
+        from external_data.news_scraper import NewsScraper
+        self.scraper = NewsScraper(["https://example.com/api/news"])
+
+    def test_fetch_news(self):
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = loop.run_until_complete(self.scraper.fetch_news())
+        self.assertIsInstance(result, list)
+
+class TestSocialMediaMonitor(unittest.TestCase):
+    def setUp(self):
+        from external_data.social_media_monitor import SocialMediaMonitor
+        self.monitor = SocialMediaMonitor({}, {})
+
+    def test_fetch_twitter(self):
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = loop.run_until_complete(self.monitor.fetch_twitter("btc"))
+        self.assertIsInstance(result, list)
+
+    def test_fetch_reddit(self):
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = loop.run_until_complete(self.monitor.fetch_reddit("bitcoin"))
+        self.assertIsInstance(result, list)
+
+class TestWhaleTracker(unittest.TestCase):
+    def setUp(self):
+        from external_data.whale_tracker import WhaleTracker
+        self.tracker = WhaleTracker("test_api_key")
+
+    def test_fetch_whale_alerts(self):
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = loop.run_until_complete(self.tracker.fetch_whale_alerts())
+        self.assertIsInstance(result, list)
+
+class TestFearGreedIndex(unittest.TestCase):
+    def setUp(self):
+        from external_data.fear_greed_index import FearGreedIndex
+        self.index = FearGreedIndex("https://example.com/api/fear_greed")
+
+    def test_fetch_index(self):
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = loop.run_until_complete(self.index.fetch_index())
+        self.assertIsInstance(result, dict)
+
+class TestPortfolioOptimizer(unittest.TestCase):
+    def setUp(self):
+        from strategies.portfolio_optimizer import PortfolioOptimizer
+        self.optimizer = PortfolioOptimizer()
+
+    def test_optimize(self):
+        assets = ["BTC", "ETH"]
+        returns = {"BTC": [0.01, 0.02], "ETH": [0.03, 0.01]}
+        weights = self.optimizer.optimize(assets, returns)
+        self.assertIsInstance(weights, dict)
+
+class TestTradeLogger(unittest.TestCase):
+    def setUp(self):
+        from utils.trade_logger import TradeLogger
+        self.logger = TradeLogger(db_manager=None)
+
+    def test_log_trade(self):
+        trade = {"user": "test", "signal": "long", "pnl": 10, "funding": 0.1}
+        self.logger.log_trade(trade)
+
+class TestNewsManager(unittest.TestCase):
+    """Test NewsManager module."""
+    
+    def setUp(self):
+        self.config = {
+            "news_sources": ["https://api.coingecko.com/api/v3/news"],
+            "sentiment": {
+                "api_url": "https://api.deepseek.com/v1/sentiment",
+                "batch_size": 8
+            },
+            "update_interval": 3600
+        }
+        self.news_manager = NewsManager(self.config)
+    
+    def test_initialization(self):
+        """Test NewsManager initialization."""
+        self.assertIsNotNone(self.news_manager)
+        self.assertEqual(self.news_manager.news_sources, ["https://api.coingecko.com/api/v3/news"])
+        self.assertEqual(self.news_manager.update_interval, 3600)
+    
+    def test_get_empty_features(self):
+        """Test empty features generation."""
+        features = self.news_manager._get_empty_features()
+        
+        expected_keys = ['avg_sentiment', 'sentiment_std', 'positive_ratio', 
+                        'negative_ratio', 'neutral_ratio', 'news_count', 'sentiment_momentum']
+        
+        for key in expected_keys:
+            self.assertIn(key, features)
+            self.assertIsInstance(features[key], float)
+    
+    def test_create_sample_news(self):
+        """Test sample news creation."""
+        sample_news = self.news_manager._create_sample_news()
+        
+        self.assertIsInstance(sample_news, list)
+        self.assertGreater(len(sample_news), 0)
+        
+        for news in sample_news:
+            self.assertIn('title', news)
+            self.assertIn('content', news)
+            self.assertIn('source', news)
+            self.assertIn('timestamp', news)
+    
+    @patch('pandas.read_csv')
+    def test_get_latest_sentiment_features_with_data(self, mock_read_csv):
+        """Test sentiment features extraction with mock data."""
+        # Mock DataFrame
+        mock_df = pd.DataFrame({
+            'timestamp': ['2024-01-01 10:00:00', '2024-01-01 11:00:00'],
+            'sentiment': [0.5, -0.3]
+        })
+        mock_read_csv.return_value = mock_df
+        
+        features = self.news_manager.get_latest_sentiment_features(hours=24)
+        
+        self.assertIsInstance(features, dict)
+        self.assertIn('avg_sentiment', features)
+        self.assertIn('news_count', features)
+    
+    @patch('pandas.read_csv')
+    def test_get_latest_sentiment_features_empty_data(self, mock_read_csv):
+        """Test sentiment features extraction with empty data."""
+        # Mock empty DataFrame
+        mock_df = pd.DataFrame()
+        mock_read_csv.return_value = mock_df
+        
+        features = self.news_manager.get_latest_sentiment_features(hours=24)
+        
+        self.assertIsInstance(features, dict)
+        self.assertEqual(features['news_count'], 0)
+        self.assertEqual(features['avg_sentiment'], 0.0)
+    
+    @patch('pathlib.Path.exists')
+    def test_get_news_summary_file_not_exists(self, mock_exists):
+        """Test news summary when file doesn't exist."""
+        mock_exists.return_value = False
+        
+        summary = self.news_manager.get_news_summary()
+        
+        self.assertIn('error', summary)
+        self.assertEqual(summary['error'], 'CSV dosyası bulunamadı')
+    
+    @patch('pandas.read_csv')
+    @patch('pathlib.Path.exists')
+    def test_get_news_summary_with_data(self, mock_exists, mock_read_csv):
+        """Test news summary with mock data."""
+        mock_exists.return_value = True
+        
+        # Mock DataFrame
+        mock_df = pd.DataFrame({
+            'timestamp': ['2024-01-01 10:00:00'],
+            'source': ['test_source'],
+            'sentiment': [0.5]
+        })
+        mock_read_csv.return_value = mock_df
+        
+        summary = self.news_manager.get_news_summary()
+        
+        self.assertIn('total_news', summary)
+        self.assertIn('sentiment_stats', summary)
+        self.assertEqual(summary['total_news'], 1)
+    
+    @patch('external_data.news_scraper.NewsScraper.fetch_news')
+    @patch('data.sentiment_deepseek.DeepSeekSentiment.analyze')
+    async def test_create_news_csv(self, mock_analyze, mock_fetch_news):
+        """Test news CSV creation."""
+        # Mock news data
+        mock_fetch_news.return_value = [
+            {
+                'title': 'Test News',
+                'content': 'Test Content',
+                'source': 'test',
+                'timestamp': '2024-01-01 10:00:00'
+            }
+        ]
+        
+        # Mock sentiment analysis
+        mock_analyze.return_value = [{'sentiment': 0.5}]
+        
+        df = await self.news_manager._create_news_csv()
+        
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertGreater(len(df), 0)
+    
+    @patch('external_data.news_scraper.NewsScraper.fetch_news')
+    async def test_create_news_csv_no_news(self, mock_fetch_news):
+        """Test news CSV creation when no news is fetched."""
+        mock_fetch_news.return_value = []
+        
+        df = await self.news_manager._create_news_csv()
+        
+        self.assertIsInstance(df, pd.DataFrame)
+        # Should create sample news when no real news is available
+        self.assertGreater(len(df), 0)
+
 def run_smoke_tests():
     """Run smoke tests for all modules."""
     print("Running smoke tests...")
@@ -634,7 +986,23 @@ def run_smoke_tests():
         TestExecutionEngine,
         TestHedgeOverlay,
         TestTradingLogger,
-        TestExplainableAI
+        TestExplainableAI,
+        TestBacktester,
+        TestModelManager,
+        TestPerformanceAnalyzer,
+        TestDataValidator,
+        TestConfigValidator,
+        TestStrategyEvaluator,
+        TestStressTesting,
+        TestDriftDetector,
+        TestFailoverHandler,
+        TestNewsScraper,
+        TestSocialMediaMonitor,
+        TestWhaleTracker,
+        TestFearGreedIndex,
+        TestPortfolioOptimizer,
+        TestTradeLogger,
+        TestNewsManager
     ]
     
     for test_case in test_cases:

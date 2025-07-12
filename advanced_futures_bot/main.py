@@ -16,6 +16,7 @@ from pathlib import Path
 
 # Import all modules
 from data.data_fetcher import DataFetcher
+from data.news_manager import NewsManager
 from sentiment.sentiment_deepseek import SentimentAnalyzer
 from trading.order_book_handler import OrderBookHandler
 from trading.futures_env import FuturesEnvironment
@@ -30,6 +31,10 @@ from trading.execution_engine import ExecutionEngine
 from trading.hedge_overlay import HedgeOverlay
 from utils.logger import TradingLogger, get_logger
 from utils.explainable_ai import ExplainableAI
+from data.real_time_streamer import RealTimeStreamer
+from infrastructure.database_manager import DatabaseManager
+from infrastructure.alert_system import AlertSystem
+from risk_management.risk_manager import RiskManager
 
 class AdvancedFuturesBot:
     """
@@ -48,6 +53,7 @@ class AdvancedFuturesBot:
         
         # Initialize components
         self.data_fetcher = None
+        self.news_manager = None
         self.sentiment_analyzer = None
         self.order_book_handler = None
         self.environment = None
@@ -61,6 +67,10 @@ class AdvancedFuturesBot:
         self.hedge_overlay = None
         self.trading_logger = None
         self.explainable_ai = None
+        self.real_time_streamer = None
+        self.database_manager = None
+        self.alert_system = None
+        self.risk_manager = None
         
         # Bot state
         self.is_running = False
@@ -137,6 +147,7 @@ class AdvancedFuturesBot:
             
             # Data components
             self.data_fetcher = DataFetcher(self.config)
+            self.news_manager = NewsManager(self.config)
             self.sentiment_analyzer = SentimentAnalyzer(self.config)
             self.order_book_handler = OrderBookHandler(self.config)
             
@@ -160,6 +171,21 @@ class AdvancedFuturesBot:
             self.trading_logger = TradingLogger(self.config)
             self.explainable_ai = ExplainableAI(self.config)
             
+            self.real_time_streamer = RealTimeStreamer()
+            self.database_manager = DatabaseManager()
+            self.alert_system = AlertSystem()
+            self.risk_manager = RiskManager(
+                max_risk=self.config.get("risk", {}).get("max_risk", 0.01),
+                stop_loss_pct=self.config.get("risk", {}).get("stop_loss_pct", 0.005)
+            )
+            
+            # RealTimeStreamer async başlatma
+            try:
+                asyncio.create_task(self.real_time_streamer.start())
+                self.logger.info("RealTimeStreamer başlatıldı.")
+            except Exception as e:
+                self.logger.error(f"RealTimeStreamer başlatılamadı: {e}")
+            
             self.logger.info("All components initialized successfully")
             
         except Exception as e:
@@ -171,6 +197,13 @@ class AdvancedFuturesBot:
         try:
             self.logger.info("Starting trading loop...")
             self.is_running = True
+            
+            # NewsManager'ı başlat ve haber verilerini yükle
+            try:
+                await self.news_manager.load_news_data()
+                self.logger.info("NewsManager başlatıldı ve haber verileri yüklendi")
+            except Exception as e:
+                self.logger.error(f"NewsManager başlatma hatası: {e}")
             
             while self.is_running:
                 try:
@@ -205,7 +238,7 @@ class AdvancedFuturesBot:
                     self._log_metrics(reward, trade_result)
                     
                     # Check risk limits
-                    self._check_risk_limits()
+                    await self._check_risk_limits()
                     
                     # Update episode
                     if done:
@@ -227,48 +260,65 @@ class AdvancedFuturesBot:
             raise
 
     async def _fetch_market_data(self) -> Optional[Dict[str, Any]]:
-        """Fetch market data from all sources."""
+        """Fetch market data from all sources (öncelik: RealTimeStreamer)."""
         try:
+            # Öncelik: RealTimeStreamer'dan veri
+            if self.real_time_streamer and self.real_time_streamer.order_book:
+                return {"order_book": self.real_time_streamer.order_book}
+            # Fallback: Eski yöntem (async ile)
             market_data = {}
-            
             for symbol in self.config["trading"]["symbols"]:
                 for timeframe in self.config["trading"]["timeframes"]:
-                    klines = self.data_fetcher.fetch_klines(symbol, timeframe, limit=100)
+                    klines = await asyncio.to_thread(self.data_fetcher.fetch_klines, symbol, timeframe, 100)
                     if klines is not None and not klines.empty:
                         market_data[f"{symbol}_{timeframe}"] = klines
-            
             return market_data if market_data else None
-            
         except Exception as e:
             self.logger.error(f"Market data fetch error: {e}")
             return None
 
     async def _analyze_sentiment(self) -> Dict[str, Any]:
-        """Analyze market sentiment."""
+        """Analyze market sentiment using NewsManager."""
         try:
-            # Get recent news/social media data
-            texts = [
-                "Bitcoin shows strong momentum",
-                "Market sentiment is bullish",
-                "Crypto market analysis"
-            ]
+            # NewsManager ile haber verilerini yükle ve sentiment feature'larını al
+            sentiment_features = self.news_manager.get_latest_sentiment_features(hours=24)
             
-            sentiment_results = self.sentiment_analyzer.batch_analyze(texts)
+            # Sentiment skorunu hesapla
+            avg_sentiment = sentiment_features.get('avg_sentiment', 0.0)
             
-            # Aggregate sentiment
-            if sentiment_results:
-                avg_sentiment = sum(r.get("sentiment_score", 0) for r in sentiment_results) / len(sentiment_results)
-                return {
-                    "sentiment": "positive" if avg_sentiment > 0 else "negative",
-                    "confidence": abs(avg_sentiment),
-                    "details": sentiment_results
+            # Sentiment kategorisini belirle
+            if avg_sentiment > 0.3:
+                sentiment_category = "positive"
+            elif avg_sentiment < -0.3:
+                sentiment_category = "negative"
+            else:
+                sentiment_category = "neutral"
+            
+            # Confidence hesapla
+            confidence = min(abs(avg_sentiment) * 2, 1.0)  # 0-1 arası normalize et
+            
+            return {
+                "sentiment": sentiment_category,
+                "confidence": confidence,
+                "avg_sentiment": avg_sentiment,
+                "features": sentiment_features,
+                "details": {
+                    "news_count": sentiment_features.get('news_count', 0),
+                    "positive_ratio": sentiment_features.get('positive_ratio', 0.0),
+                    "negative_ratio": sentiment_features.get('negative_ratio', 0.0),
+                    "sentiment_momentum": sentiment_features.get('sentiment_momentum', 0.0)
                 }
-            
-            return {"sentiment": "neutral", "confidence": 0.5, "details": []}
+            }
             
         except Exception as e:
             self.logger.error(f"Sentiment analysis error: {e}")
-            return {"sentiment": "neutral", "confidence": 0.5, "details": []}
+            return {
+                "sentiment": "neutral", 
+                "confidence": 0.5, 
+                "avg_sentiment": 0.0,
+                "features": {},
+                "details": {}
+            }
 
     def _process_order_book(self, market_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process order book data."""
@@ -327,9 +377,18 @@ class AdvancedFuturesBot:
                     df["volatility"].iloc[-1] if "volatility" in df.columns else 0
                 ])
             
-            # Sentiment features
-            sentiment_score = 1.0 if sentiment_data["sentiment"] == "positive" else -1.0
-            state_features.extend([sentiment_score, sentiment_data["confidence"]])
+            # Sentiment features (NewsManager'dan gelen detaylı feature'lar)
+            sentiment_features = sentiment_data.get("features", {})
+            state_features.extend([
+                sentiment_data.get("avg_sentiment", 0.0),  # Ortalama sentiment skoru
+                sentiment_data.get("confidence", 0.5),     # Confidence
+                sentiment_features.get("sentiment_std", 0.0),  # Sentiment standart sapması
+                sentiment_features.get("positive_ratio", 0.0), # Pozitif haber oranı
+                sentiment_features.get("negative_ratio", 0.0), # Negatif haber oranı
+                sentiment_features.get("neutral_ratio", 1.0),  # Nötr haber oranı
+                sentiment_features.get("news_count", 0),       # Haber sayısı
+                sentiment_features.get("sentiment_momentum", 0.0)  # Sentiment momentum
+            ])
             
             # Order book features
             state_features.extend([
@@ -373,7 +432,7 @@ class AdvancedFuturesBot:
 
     async def _execute_trade(self, action: int, market_data: Dict[str, Any], 
                            order_book_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute trade based on action."""
+        """Execute trade based on action. RiskManager, DatabaseManager ve AlertSystem entegre."""
         try:
             if action == 0:  # Sell/Short
                 side = "sell"
@@ -381,32 +440,67 @@ class AdvancedFuturesBot:
                 side = "buy"
             else:  # Hold
                 return {"executed": False, "reason": "hold"}
-            
-            # Calculate position size
+
+            # Fiyat ve bakiye
             balance = self.environment.balance
-            price = market_data[f"{self.config['trading']['symbols'][0]}_1m"]["close"].iloc[-1]
-            confidence = 0.8  # From action confidence
-            
-            size = self.position_manager.calculate_position_size(balance, price, confidence)
-            
-            # Create order
+            price = market_data.get(f"{self.config['trading']['symbols'][0]}_1m", {}).get("close", [0])[-1] if f"{self.config['trading']['symbols'][0]}_1m" in market_data else 0
+            stop_price = price * (1 - self.config["risk"].get("stop_loss_pct", 0.005)) if side == "buy" else price * (1 + self.config["risk"].get("stop_loss_pct", 0.005))
+
+            # Pozisyon büyüklüğü hesapla (RiskManager)
+            try:
+                size = await self.risk_manager.calculate_position_size(balance, price, stop_price)
+            except Exception as e:
+                self.logger.error(f"RiskManager pozisyon büyüklüğü hatası: {e}")
+                await self.alert_system.alert(f"RiskManager pozisyon büyüklüğü hatası: {e}", level="error")
+                return {"executed": False, "error": str(e)}
+
+            # Stop-loss kontrolü (RiskManager)
+            try:
+                stop_loss_triggered = await self.risk_manager.check_stop_loss(price, price)
+                if stop_loss_triggered:
+                    self.logger.warning("Stop-loss tetiklendi, trade yapılmadı.")
+                    await self.alert_system.alert("Stop-loss tetiklendi, trade yapılmadı.", level="warning")
+                    return {"executed": False, "reason": "stop_loss"}
+            except Exception as e:
+                self.logger.error(f"Stop-loss kontrol hatası: {e}")
+                await self.alert_system.alert(f"Stop-loss kontrol hatası: {e}", level="error")
+                return {"executed": False, "error": str(e)}
+
+            # Order oluştur
             order = {
                 "side": side,
                 "size": size,
                 "price": price
             }
-            
-            # Simulate execution
-            execution_result = self.execution_engine.simulate_execution(order, order_book_data)
-            
-            if execution_result["executed_size"] > 0:
+
+            # Trade execution (ExecutionEngine)
+            try:
+                execution_result = self.execution_engine.simulate_execution(order, order_book_data)
+            except Exception as e:
+                self.logger.error(f"Trade execution error: {e}")
+                await self.alert_system.alert(f"Trade execution error: {e}", level="error")
+                return {"executed": False, "error": str(e)}
+
+            # Trade kaydını veritabanına yaz (DatabaseManager)
+            try:
+                await self.database_manager.save_trade({
+                    "order": order,
+                    "execution_result": execution_result,
+                    "timestamp": time.time()
+                })
+            except Exception as e:
+                self.logger.error(f"Trade veritabanı kaydı hatası: {e}")
+                await self.alert_system.alert(f"Trade veritabanı kaydı hatası: {e}", level="error")
+
+            if execution_result.get("executed_size", 0) > 0:
                 self.total_trades += 1
                 self.logger.info(f"Trade executed: {side} {execution_result['executed_size']} @ {execution_result['executed_price']}")
-            
+
             return execution_result
-            
+
         except Exception as e:
             self.logger.error(f"Trade execution error: {e}")
+            await self.alert_system.alert(f"Trade execution error: {e}", level="error")
             return {"executed": False, "error": str(e)}
 
     def _update_environment(self, action: int, trade_result: Dict[str, Any], 
@@ -466,31 +560,43 @@ class AdvancedFuturesBot:
         except Exception as e:
             self.logger.error(f"Metrics logging error: {e}")
 
-    def _check_risk_limits(self):
-        """Check and enforce risk limits."""
+    async def _check_risk_limits(self):
+        """Check and enforce risk limits. RiskManager ve AlertSystem entegre."""
         try:
-            # Check liquidation risk
+            # Likidasyon riski kontrolü
             risk_info = self.liquidation_checker.check_liquidation_risk(
                 self.environment.position,
                 self.environment.balance,
                 self.environment.current_price,
                 self.environment.entry_price
             )
-            
             if risk_info["liquidation_risk"] > 0.8:
                 self.logger.warning(f"High liquidation risk: {risk_info['liquidation_risk']:.2f}")
-                
+                await self.alert_system.alert(f"Likidasyon riski çok yüksek: {risk_info['liquidation_risk']:.2f}", level="warning")
                 if self.liquidation_checker.should_auto_flat(risk_info["margin_ratio"]):
                     self.logger.warning("Auto-flat triggered due to high risk")
-                    # Implement auto-flat logic here
-            
-            # Check drawdown
+                    await self.alert_system.alert("Auto-flat triggered due to high risk", level="critical")
+                    # Auto-flat işlemi burada uygulanabilir
+            # Drawdown kontrolü
             if self.environment.drawdown > self.config["risk"]["max_drawdown"]:
                 self.logger.warning(f"Max drawdown exceeded: {self.environment.drawdown:.2f}")
+                await self.alert_system.alert(f"Max drawdown aşıldı: {self.environment.drawdown:.2f}", level="critical")
                 self.is_running = False
-            
+            # RiskManager ile ek risk threshold kontrolü
+            try:
+                pnl = getattr(self.environment, "pnl", 0.0)
+                threshold = self.config["risk"].get("risk_threshold", 0.05)
+                risk_limit = await self.risk_manager.check_risk_threshold(pnl, threshold)
+                if risk_limit:
+                    self.logger.warning("Risk threshold aşıldı, işlemler durduruluyor.")
+                    await self.alert_system.alert("Risk threshold aşıldı, işlemler durduruluyor.", level="critical")
+                    self.is_running = False
+            except Exception as e:
+                self.logger.error(f"RiskManager risk threshold kontrol hatası: {e}")
+                await self.alert_system.alert(f"RiskManager risk threshold kontrol hatası: {e}", level="error")
         except Exception as e:
             self.logger.error(f"Risk check error: {e}")
+            await self.alert_system.alert(f"Risk check error: {e}", level="error")
 
     def _end_episode(self):
         """End current episode and prepare for next."""
